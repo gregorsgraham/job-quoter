@@ -166,18 +166,20 @@
       <input type="file" id="photoInput-after"  accept="image/*" capture="environment" style="display:none" onchange="handlePhotos(this.files, 'after')">
       <input type="file" id="photoInput-receipt" accept="image/*" capture="environment" style="display:none" onchange="handlePhotos(this.files, 'receipt')">
       <input type="file" id="photoInput-other"  accept="image/*" capture="environment" style="display:none" onchange="handlePhotos(this.files, 'other')">
+      <input type="file" id="photoInput-tpain"  accept="image/*" capture="environment" style="display:none" onchange="handlePhotos(this.files, 'tpain')">
       <input type="file" id="libraryInput" multiple accept="image/*" style="display:none" onchange="handlePhotos(this.files, null)">
 
       <!-- Five labeled capture buttons in a 5-up grid (wraps on mobile). -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(120px, 1fr));gap:8px;margin-top:10px">
-        <button class="btn" onclick="document.getElementById('photoInput-before').click()" style="background:#fff8f0;border:2px solid #c85a00;color:#c85a00;padding:14px 6px;font-weight:700">📸 Before</button>
-        <button class="btn" onclick="document.getElementById('photoInput-during').click()" style="background:#f0f6ff;border:2px solid #1a5999;color:#1a5999;padding:14px 6px;font-weight:700">📸 During</button>
-        <button class="btn" onclick="document.getElementById('photoInput-after').click()" style="background:#f0faf2;border:2px solid #2d7a3a;color:#2d7a3a;padding:14px 6px;font-weight:700">📸 After</button>
-        <button class="btn" onclick="document.getElementById('photoInput-receipt').click()" style="background:#fff3cd;border:2px solid #c85a00;color:#7a5c00;padding:14px 6px;font-weight:700">🧾 Receipt</button>
-        <button class="btn" onclick="document.getElementById('photoInput-other').click()" style="background:#f8f4ff;border:2px solid #7b5ea7;color:#7b5ea7;padding:14px 6px;font-weight:700">📷 Other</button>
+        <button class="btn" onclick="openPhotoPicker('before')"  style="background:#fff8f0;border:2px solid #c85a00;color:#c85a00;padding:14px 6px;font-weight:700">📸 Before</button>
+        <button class="btn" onclick="openPhotoPicker('during')"  style="background:#f0f6ff;border:2px solid #1a5999;color:#1a5999;padding:14px 6px;font-weight:700">📸 During</button>
+        <button class="btn" onclick="openPhotoPicker('after')"   style="background:#f0faf2;border:2px solid #2d7a3a;color:#2d7a3a;padding:14px 6px;font-weight:700">📸 After</button>
+        <button class="btn" onclick="openPhotoPicker('receipt')" style="background:#fff3cd;border:2px solid #c85a00;color:#7a5c00;padding:14px 6px;font-weight:700">🧾 Receipt</button>
+        <button class="btn" onclick="openPhotoPicker('other')"   style="background:#f8f4ff;border:2px solid #7b5ea7;color:#7b5ea7;padding:14px 6px;font-weight:700">📷 Other</button>
+        <button class="btn" onclick="openPhotoPicker('tpain')"   style="background:#fff0f6;border:2px solid #c2185b;color:#c2185b;padding:14px 6px;font-weight:700">🕶 T Pain</button>
       </div>
       <div class="btn-row" style="margin-top:8px">
-        <button class="btn btn-secondary" onclick="document.getElementById('libraryInput').click()" style="width:100%">🖼 Add from library (you'll pick a label after)</button>
+        <button class="btn btn-secondary" onclick="openPhotoPicker('library')" style="width:100%">🖼 Add from library (you'll pick a label after)</button>
       </div>
 
       <div id="photoGrid" class="photo-grid"></div>
@@ -197,7 +199,10 @@
           <button onclick="assignLabel('after')" style="background:#f0faf2;border:2px solid #2d7a3a;border-radius:8px;padding:12px 6px;cursor:pointer;font-size:14px;font-weight:700;color:#2d7a3a">After</button>
           <button onclick="assignLabel('receipt')" style="background:#fff3cd;border:2px solid #c85a00;border-radius:8px;padding:12px 6px;cursor:pointer;font-size:14px;font-weight:700;color:#7a5c00">Receipt</button>
         </div>
-        <button onclick="assignLabel('other')" style="width:100%;background:#f8f4ff;border:2px solid #7b5ea7;border-radius:8px;padding:10px;cursor:pointer;font-size:13px;font-weight:600;color:#7b5ea7;margin-bottom:8px">Other</button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <button onclick="assignLabel('other')" style="background:#f8f4ff;border:2px solid #7b5ea7;border-radius:8px;padding:10px;cursor:pointer;font-size:13px;font-weight:600;color:#7b5ea7">Other</button>
+          <button onclick="assignLabel('tpain')" style="background:#fff0f6;border:2px solid #c2185b;border-radius:8px;padding:10px;cursor:pointer;font-size:13px;font-weight:600;color:#c2185b">🕶 T Pain</button>
+        </div>
         <button onclick="closeLabelModal()" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:7px;background:#fff;font-size:13px;color:#888;cursor:pointer">Skip for now</button>
       </div>
     </div>
@@ -616,9 +621,21 @@ function recalc() {
 // =========================================================================
 // PHOTOS
 // =========================================================================
+// Clear the input's value BEFORE programmatically clicking it. Browsers
+// (especially Safari/iOS) sometimes won't fire onchange on a second
+// pick of the same file when the input still has a previous selection.
+// Clearing first guarantees onchange fires every time.
+function openPhotoPicker(kind) {
+  const id = (kind === 'library') ? 'libraryInput' : 'photoInput-' + kind;
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.value = '';
+  el.click();
+}
+
 // Accepts an optional `label` (one of: before, during, after, receipt,
-// other). When null/undefined, the photo lands unlabeled and the label
-// modal pops to let the user pick. Labels show as a badge on each
+// other, tpain). When null/undefined, the photo lands unlabeled and the
+// label modal pops to let the user pick. Labels show as a badge on each
 // thumbnail and group photos in the PDF.
 function handlePhotos(files, label) {
   if (!files || !files.length) return;
@@ -654,7 +671,7 @@ function handlePhotos(files, label) {
   function finalize() {
     renderPhotos();
     autosave();
-    ['photoInput-before','photoInput-during','photoInput-after','photoInput-receipt','photoInput-other','libraryInput'].forEach(id => {
+    ['photoInput-before','photoInput-during','photoInput-after','photoInput-receipt','photoInput-other','photoInput-tpain','libraryInput'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
     // If any of the newly-added photos came in unlabeled (library
@@ -883,7 +900,8 @@ function renderPhotos() {
     during:  { bg:'#1a5999', fg:'#fff' },
     after:   { bg:'#2d7a3a', fg:'#fff' },
     receipt: { bg:'#7a5c00', fg:'#fff3cd' },
-    other:   { bg:'#7b5ea7', fg:'#fff' }
+    other:   { bg:'#7b5ea7', fg:'#fff' },
+    tpain:   { bg:'#c2185b', fg:'#fff' }
   };
   grid.innerHTML = photos.map((p, i) => {
     const t = p.timestamp ? new Date(p.timestamp).toLocaleTimeString('en-CA', {hour:'2-digit', minute:'2-digit'}) : '';
@@ -1241,14 +1259,15 @@ async function generateQuotePDF() {
     // photos together, then During, then After, then Receipts, then
     // Other / unlabeled. One photo per page with the label as a header.
     if (photos.length) {
-      const order = ['before','during','after','receipt','other',null];
+      const order = ['before','during','after','receipt','tpain','other',null];
       const grouped = [];
       order.forEach(lbl => {
         photos.forEach((p, i) => { if ((p.label || null) === lbl) grouped.push({ p, i, lbl }); });
       });
       const sectionTitle = {
         before: 'Before', during: 'During', after: 'After',
-        receipt: 'Receipt', other: 'Other photo', null: 'Photo'
+        receipt: 'Receipt', tpain: 'T Pain (on-site selfie)',
+        other: 'Other photo', null: 'Photo'
       };
       grouped.forEach((entry, idx) => {
         const p = entry.p;
@@ -2120,7 +2139,7 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 
-<div style="text-align:center;font-size:11px;color:#bbb;padding:12px 0">Job Quoter v0.9</div>
+<div style="text-align:center;font-size:11px;color:#bbb;padding:12px 0">Job Quoter v1.0</div>
 
 </body>
 </html>
