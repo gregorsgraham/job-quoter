@@ -1,0 +1,12 @@
+{
+  "name": "Job Quoter",
+  "short_name": "Job Quoter",
+  "description": "Quote jobs, capture site photos with timestamps, track materials and labour, send a polished PDF quote to your customer.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "browser",
+  "orientation": "portrait",
+  "background_color": "#f0ede8",
+  "theme_color": "#1e3a5f",
+  "categories": ["productivity", "business", "utilities"]
+}
