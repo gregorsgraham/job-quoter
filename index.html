@@ -72,6 +72,7 @@
     <button class="tab" data-tab="job">Job</button>
     <button class="tab" data-tab="quote">Quote</button>
     <button class="tab" data-tab="saved">Saved jobs</button>
+    <button class="tab" data-tab="calendar">📅 Calendar</button>
     <button class="tab" data-tab="spreadsheet">📊 Spreadsheet</button>
   </nav>
 
@@ -88,6 +89,10 @@
       <div class="row c2">
         <div class="field"><label>Job date</label><input id="jobDate" type="date" oninput="autosave()"></div>
         <div class="field"><label>Quote # <span class="small">(optional)</span></label><input id="quoteNumber" placeholder="auto" oninput="autosave()"></div>
+      </div>
+      <div class="row c2">
+        <div class="field"><label>Estimated days <span class="small">(your estimate — lands on the quote)</span></label><input id="estimatedDays" type="number" step="0.5" placeholder="e.g. 3" oninput="autosave();updateActualDaysDisplay()"></div>
+        <div class="field"><label>Actual days worked <span class="small">(auto, from employee logs)</span></label><input id="actualDaysDisplay" readonly placeholder="—" style="background:#f6f8fb;color:#1e3a5f;font-weight:600"></div>
       </div>
       <div class="field">
         <label>Job description / scope</label>
@@ -286,16 +291,59 @@
     </div>
   </section>
 
+  <!-- ===== CALENDAR TAB ===== -->
+  <section id="tab-calendar" class="page">
+    <div class="card">
+      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <span>📅 <span id="calendarMonthLabel">Month</span></span>
+        <span>
+          <button class="btn btn-secondary" onclick="changeCalendarMonth(-1)" style="font-size:13px;padding:6px 10px">‹ Prev</button>
+          <button class="btn btn-secondary" onclick="changeCalendarMonth(0)" style="font-size:13px;padding:6px 10px">Today</button>
+          <button class="btn btn-secondary" onclick="changeCalendarMonth(1)" style="font-size:13px;padding:6px 10px">Next ›</button>
+        </span>
+      </div>
+      <div class="hint">Days with activity are highlighted. Tap any day to see employees worked, money logged, and quotes generated that day across all jobs.</div>
+      <div id="calendarGrid" style="margin-top:14px"></div>
+      <div id="calendarDayDetail" style="display:none;margin-top:14px;background:#f6f8fb;border:1px solid #b3d1f5;border-radius:8px;padding:12px 14px"></div>
+    </div>
+  </section>
+
   <!-- ===== SPREADSHEET TAB ===== -->
   <section id="tab-spreadsheet" class="page">
     <div class="card">
-      <div class="card-title">📊 Labour spreadsheet — all jobs</div>
-      <div class="hint">Running log of every employee × day across every saved job + the current one. One row per worker per day. Export to an Excel file you can email, archive, or use for payroll.</div>
+      <div class="card-title">📊 Full spreadsheet — all jobs, all money</div>
+      <div class="hint">Everything across every saved job + the current one. The Excel export produces multiple sheets: Jobs summary (one row per job with all totals), Labour log (per worker per day), Materials, Equipment, Transportation, and Quote history.</div>
       <div class="btn-row" style="margin-top:12px">
-        <button class="btn btn-green" onclick="exportLabourXlsx()" style="flex:1;padding:13px;font-weight:700">⬇ Export Excel (.xlsx)</button>
+        <button class="btn btn-green" onclick="exportFullXlsx()" style="flex:1;padding:13px;font-weight:700">⬇ Export full Excel (.xlsx)</button>
       </div>
       <div id="spreadsheetStatus" class="hint" style="margin-top:8px;text-align:center"></div>
-      <div style="margin-top:14px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+    </div>
+
+    <!-- On-screen preview: Jobs summary table — the top-line view. -->
+    <div class="card">
+      <div class="card-title">Jobs summary</div>
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+        <table id="jobsSummaryTable" style="border-collapse:collapse;font-size:12px;min-width:100%">
+          <thead><tr style="background:#f0f0ee">
+            <th style="padding:6px 8px;border:1px solid #ccc;text-align:left">Job</th>
+            <th style="padding:6px 8px;border:1px solid #ccc;text-align:left">Date</th>
+            <th style="padding:6px 8px;border:1px solid #ccc;text-align:right">Materials</th>
+            <th style="padding:6px 8px;border:1px solid #ccc;text-align:right">Labour</th>
+            <th style="padding:6px 8px;border:1px solid #ccc;text-align:right">Equipment</th>
+            <th style="padding:6px 8px;border:1px solid #ccc;text-align:right">Transport</th>
+            <th style="padding:6px 8px;border:1px solid #ccc;text-align:right">Total</th>
+            <th style="padding:6px 8px;border:1px solid #ccc;text-align:center">Sent</th>
+          </tr></thead>
+          <tbody id="jobsSummaryBody"></tbody>
+        </table>
+        <div id="jobsSummaryEmpty" class="empty" style="padding:14px 0">No jobs yet.</div>
+      </div>
+    </div>
+
+    <!-- Labour log preview — the day-by-day, employee-by-employee log. -->
+    <div class="card">
+      <div class="card-title">Labour log</div>
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
         <table id="spreadsheetPreview" style="border-collapse:collapse;font-size:12px;min-width:100%">
           <thead><tr style="background:#f0f0ee">
             <th style="padding:6px 10px;border:1px solid #ccc;text-align:left">Date</th>
@@ -347,6 +395,8 @@ function _emptyJob() {
     customerName: '', customerPhone: '', customerEmail: '',
     siteAddress: '', jobDate: '', quoteNumber: '',
     jobDescription: '',
+    estimatedDays: '',  // user's estimate at quote time
+    quoteGenerations: [],  // [{at, format}] — log of when quotes were generated
     materials: [],      // [{desc, qty, rate}]
     labour: [],         // [{desc, qty, rate}]
     equipment: [],      // [{desc, qty, rate}] — rented/owned tools (excavator etc.)
@@ -399,6 +449,7 @@ function collectFromDom() {
   job.jobDate = v('jobDate');
   job.quoteNumber = v('quoteNumber');
   job.jobDescription = v('jobDescription');
+  job.estimatedDays = v('estimatedDays');
   job.taxRate = parseFloat(v('taxRate')) || 0;
   job.discount = parseFloat(v('discount')) || 0;
   job.deposit = parseFloat(v('deposit')) || 0;
@@ -474,12 +525,13 @@ function loadJob() {
   renderLineItems('equipment');
   renderLineItems('transportation');
   renderEmployees();
+  updateActualDaysDisplay();
   renderVoiceNotes();
   renderSavedJobs();
   recalc();
 }
 function hydrateJobToDom() {
-  ['customerName','customerPhone','customerEmail','siteAddress','jobDate','quoteNumber','jobDescription','quoteNotes'].forEach(k => {
+  ['customerName','customerPhone','customerEmail','siteAddress','jobDate','quoteNumber','jobDescription','quoteNotes','estimatedDays'].forEach(k => {
     const el = document.getElementById(k);
     if (el) el.value = job[k] || '';
   });
@@ -1223,6 +1275,7 @@ async function generateQuotePDF() {
 
     const fname = 'Quote_' + (job.customerName ? job.customerName.replace(/[^a-z0-9]+/gi,'_') : 'job') + '_' + (job.jobDate || new Date().toISOString().split('T')[0]) + '.pdf';
     doc.save(fname);
+    _logQuoteGeneration('pdf');
     status.textContent = '✓ PDF saved as ' + fname;
   } catch(e) {
     console.error(e);
@@ -1238,8 +1291,294 @@ function switchTab(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
   if (name === 'saved') renderSavedJobs();
   if (name === 'quote') renderQuotePhotoStrip();
-  if (name === 'spreadsheet') renderSpreadsheet();
+  if (name === 'spreadsheet') { renderSpreadsheet(); renderJobsSummary(); }
+  if (name === 'calendar') renderCalendar();
 }
+
+// =========================================================================
+// LENGTH OF JOB — estimated vs actual.
+// Actual days = number of unique dates across all employee day-entries
+// that have non-zero hours. Updates whenever employees/days change.
+// =========================================================================
+function updateActualDaysDisplay() {
+  const el = document.getElementById('actualDaysDisplay');
+  if (!el) return;
+  const dates = new Set();
+  let totalHrs = 0;
+  (job.employees || []).forEach(e => {
+    (e.days || []).forEach(d => {
+      const h = parseFloat(d.hours) || 0;
+      if (h > 0 && d.date) { dates.add(d.date); totalHrs += h; }
+    });
+  });
+  if (!dates.size) { el.value = ''; return; }
+  el.value = dates.size + (dates.size === 1 ? ' day' : ' days') + ' · ' + totalHrs.toFixed(1) + ' hr total';
+}
+
+// =========================================================================
+// CALENDAR — month view across all jobs (saved + current). Each day cell
+// shows indicators for labour worked + money logged + quotes generated.
+// Tap a day to see details below the grid.
+// =========================================================================
+let _calendarYear = (new Date()).getFullYear();
+let _calendarMonth = (new Date()).getMonth();
+
+function changeCalendarMonth(delta) {
+  if (delta === 0) {
+    const now = new Date();
+    _calendarYear = now.getFullYear();
+    _calendarMonth = now.getMonth();
+  } else {
+    _calendarMonth += delta;
+    if (_calendarMonth < 0) { _calendarMonth = 11; _calendarYear--; }
+    if (_calendarMonth > 11) { _calendarMonth = 0; _calendarYear++; }
+  }
+  renderCalendar();
+}
+
+// Collect events for the calendar across all jobs.
+// Returns { 'YYYY-MM-DD': { labour:[...], quotes:[...], jobs:Set } }
+function _collectCalendarData() {
+  const days = {};
+  function ensure(d) {
+    if (!days[d]) days[d] = { labour: [], quotes: [], jobs: new Set() };
+    return days[d];
+  }
+  function addJobData(j, jobLabel) {
+    if (!j) return;
+    (j.employees || []).forEach(e => {
+      (e.days || []).forEach(d => {
+        if (!d.date) return;
+        const hrs = parseFloat(d.hours) || 0;
+        if (hrs <= 0) return;
+        const slot = ensure(d.date);
+        slot.labour.push({ employee: e.name || '(unnamed)', hours: hrs, rate: parseFloat(e.rate) || 0, job: jobLabel });
+        slot.jobs.add(jobLabel);
+      });
+    });
+    (j.quoteGenerations || []).forEach(q => {
+      if (!q || !q.at) return;
+      const d = q.at.split('T')[0];
+      const slot = ensure(d);
+      slot.quotes.push({ format: q.format || '?', job: jobLabel });
+      slot.jobs.add(jobLabel);
+    });
+  }
+  let arr = [];
+  try { arr = JSON.parse(localStorage.getItem('jq_archive') || '[]'); } catch(e){}
+  arr.forEach(entry => {
+    const j = entry && entry.job;
+    if (!j) return;
+    addJobData(j, (j.customerName || j.siteAddress || 'Untitled') + (j.jobDate ? ' · ' + j.jobDate : ''));
+  });
+  addJobData(job, (job.customerName || job.siteAddress || 'Current') + (job.jobDate ? ' · ' + job.jobDate : '') + ' (live)');
+  return days;
+}
+
+function renderCalendar() {
+  const grid = document.getElementById('calendarGrid');
+  const label = document.getElementById('calendarMonthLabel');
+  if (!grid || !label) return;
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  label.textContent = monthNames[_calendarMonth] + ' ' + _calendarYear;
+  const firstDay = new Date(_calendarYear, _calendarMonth, 1);
+  const lastDay = new Date(_calendarYear, _calendarMonth + 1, 0);
+  const startDow = firstDay.getDay();
+  const daysInMonth = lastDay.getDate();
+  const data = _collectCalendarData();
+  const todayStr = new Date().toISOString().split('T')[0];
+  let html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
+  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d => {
+    html += '<div style="text-align:center;font-size:11px;font-weight:700;color:#888;padding:4px">' + d + '</div>';
+  });
+  // Padding for first row
+  for (let i = 0; i < startDow; i++) html += '<div></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = _calendarYear + '-' + String(_calendarMonth + 1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+    const slot = data[dateStr];
+    const has = !!slot;
+    const isToday = dateStr === todayStr;
+    const bg = has ? '#e8f5e9' : '#fff';
+    const border = isToday ? '2px solid #1e3a5f' : '1px solid #ddd';
+    let indicators = '';
+    if (has) {
+      if (slot.labour.length)  indicators += '<span title="' + slot.labour.length + ' labour entry">👷' + slot.labour.length + '</span> ';
+      if (slot.quotes.length)  indicators += '<span title="' + slot.quotes.length + ' quote">📄' + slot.quotes.length + '</span>';
+    }
+    html += '<div onclick="showCalendarDay(\'' + dateStr + '\')" '
+      + 'style="background:' + bg + ';border:' + border + ';border-radius:6px;padding:6px 4px;min-height:54px;cursor:pointer;text-align:center;font-size:12px;display:flex;flex-direction:column;justify-content:space-between">'
+      + '<div style="font-weight:700;color:' + (isToday ? '#1e3a5f' : '#333') + '">' + d + '</div>'
+      + '<div style="font-size:10px;color:#1e3a5f">' + indicators + '</div>'
+      + '</div>';
+  }
+  html += '</div>';
+  grid.innerHTML = html;
+  // Clear the detail panel
+  const detail = document.getElementById('calendarDayDetail');
+  if (detail) { detail.style.display = 'none'; detail.innerHTML = ''; }
+}
+
+function showCalendarDay(dateStr) {
+  const data = _collectCalendarData();
+  const slot = data[dateStr] || { labour: [], quotes: [], jobs: new Set() };
+  const detail = document.getElementById('calendarDayDetail');
+  if (!detail) return;
+  let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+    + '<div style="font-weight:700;color:#1e3a5f;font-size:14px">' + dateStr + '</div>'
+    + '<button onclick="document.getElementById(\'calendarDayDetail\').style.display=\'none\'" style="background:none;border:none;color:#888;font-size:18px;cursor:pointer">×</button>'
+    + '</div>';
+  if (!slot.labour.length && !slot.quotes.length) {
+    html += '<div class="hint">Nothing logged on this day.</div>';
+  } else {
+    if (slot.labour.length) {
+      html += '<div style="font-weight:600;color:#1e3a5f;margin:8px 0 4px">👷 Labour</div>';
+      let dayTotal = 0;
+      slot.labour.forEach(l => {
+        const t = l.hours * l.rate;
+        dayTotal += t;
+        html += '<div style="font-size:12px;padding:3px 0">' + _attr(l.employee) + ' — ' + l.hours.toFixed(2) + ' hr × $' + l.rate.toFixed(2) + ' = $' + t.toFixed(2) + ' <span style="color:#888">(' + _attr(l.job) + ')</span></div>';
+      });
+      html += '<div style="margin-top:4px;font-size:12px;font-weight:600;color:#1e3a5f">Labour total: $' + dayTotal.toFixed(2) + '</div>';
+    }
+    if (slot.quotes.length) {
+      html += '<div style="font-weight:600;color:#1e3a5f;margin:10px 0 4px">📄 Quotes generated</div>';
+      slot.quotes.forEach(q => {
+        html += '<div style="font-size:12px;padding:3px 0">' + q.format.toUpperCase() + ' — <span style="color:#888">' + _attr(q.job) + '</span></div>';
+      });
+    }
+  }
+  detail.innerHTML = html;
+  detail.style.display = 'block';
+}
+
+// =========================================================================
+// QUOTE GENERATION LOGGING — every format generator stamps the date so
+// the calendar can show "quote made today" markers.
+// =========================================================================
+function _logQuoteGeneration(format) {
+  if (!Array.isArray(job.quoteGenerations)) job.quoteGenerations = [];
+  job.quoteGenerations.push({ at: new Date().toISOString(), format: format });
+  autosave();
+}
+
+// =========================================================================
+// JOBS SUMMARY — top-line per-job totals on the Spreadsheet tab.
+// =========================================================================
+function _collectAllJobs() {
+  const out = [];
+  let arr = [];
+  try { arr = JSON.parse(localStorage.getItem('jq_archive') || '[]'); } catch(e){}
+  arr.forEach(entry => {
+    const j = entry && entry.job;
+    if (!j) return;
+    out.push({ job: j, label: entry.label || (j.customerName || 'Untitled'), savedAt: entry.savedAt, sent: !!entry.sent, current: false });
+  });
+  out.push({ job: job, label: (job.customerName || job.siteAddress || 'Current (unsaved)'), savedAt: null, sent: false, current: true });
+  return out;
+}
+function _jobTotals(j) {
+  const sum = arr => (arr || []).reduce((s,i) => s + (i.qty||0)*(i.rate||0), 0);
+  const mat = sum(j.materials), lab = sum(j.labour), eq = sum(j.equipment), tr = sum(j.transportation);
+  return { mat, lab, eq, tr, sub: mat+lab+eq+tr };
+}
+function renderJobsSummary() {
+  const tbody = document.getElementById('jobsSummaryBody');
+  const empty = document.getElementById('jobsSummaryEmpty');
+  if (!tbody || !empty) return;
+  const entries = _collectAllJobs();
+  if (!entries.length) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  tbody.innerHTML = entries.map(en => {
+    const t = _jobTotals(en.job);
+    const taxR = parseFloat(en.job.taxRate) || 0;
+    const disc = parseFloat(en.job.discount) || 0;
+    const taxable = Math.max(0, t.sub - disc);
+    const grand = taxable + taxable * (taxR/100);
+    const sentChip = en.current ? '<span style="color:#1a5999">live</span>' : (en.sent ? '<span style="color:#2d7a3a;font-weight:600">✓</span>' : '');
+    return '<tr>'
+      + '<td style="padding:6px 8px;border:1px solid #ddd">' + _attr(en.label) + '</td>'
+      + '<td style="padding:6px 8px;border:1px solid #ddd">' + _attr(en.job.jobDate || '') + '</td>'
+      + '<td style="padding:6px 8px;border:1px solid #ddd;text-align:right">$' + t.mat.toFixed(2) + '</td>'
+      + '<td style="padding:6px 8px;border:1px solid #ddd;text-align:right">$' + t.lab.toFixed(2) + '</td>'
+      + '<td style="padding:6px 8px;border:1px solid #ddd;text-align:right">$' + t.eq.toFixed(2) + '</td>'
+      + '<td style="padding:6px 8px;border:1px solid #ddd;text-align:right">$' + t.tr.toFixed(2) + '</td>'
+      + '<td style="padding:6px 8px;border:1px solid #ddd;text-align:right;font-weight:600;color:#1e3a5f">$' + grand.toFixed(2) + '</td>'
+      + '<td style="padding:6px 8px;border:1px solid #ddd;text-align:center">' + sentChip + '</td>'
+      + '</tr>';
+  }).join('');
+}
+
+// =========================================================================
+// FULL EXCEL EXPORT — multi-sheet workbook covering everything.
+// =========================================================================
+function exportFullXlsx() {
+  const status = document.getElementById('spreadsheetStatus');
+  if (typeof XLSX === 'undefined') { status.textContent = '⚠ Excel library not loaded yet — try again in a couple seconds.'; return; }
+  const entries = _collectAllJobs();
+  if (!entries.length) { status.textContent = 'Nothing to export yet.'; return; }
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Jobs summary
+  const summary = [['Job','Customer','Date','Materials','Labour','Equipment','Transport','Subtotal','Tax %','Tax','Discount','Grand total','Sent','Live?']];
+  entries.forEach(en => {
+    const t = _jobTotals(en.job);
+    const taxR = parseFloat(en.job.taxRate) || 0;
+    const disc = parseFloat(en.job.discount) || 0;
+    const taxable = Math.max(0, t.sub - disc);
+    const tax = taxable * (taxR/100);
+    const grand = taxable + tax;
+    summary.push([
+      en.label, en.job.customerName || '', en.job.jobDate || '',
+      t.mat, t.lab, t.eq, t.tr, t.sub, taxR, tax, disc, grand,
+      en.sent ? 'Yes' : '', en.current ? 'Yes' : ''
+    ]);
+  });
+  const sumSheet = XLSX.utils.aoa_to_sheet(summary);
+  sumSheet['!cols'] = [{wch:30},{wch:20},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:7},{wch:10},{wch:10},{wch:13},{wch:6},{wch:6}];
+  XLSX.utils.book_append_sheet(wb, sumSheet, 'Jobs summary');
+
+  // Sheet 2: Labour log (reuses the cross-job collector)
+  const labRows = _collectAllEmployeeDays();
+  const labour = [['Date','Employee','Hours','Rate','Day total','Job']];
+  labRows.forEach(r => labour.push([r.date, r.employee, r.hours, r.rate, r.total, r.job]));
+  const labSheet = XLSX.utils.aoa_to_sheet(labour);
+  labSheet['!cols'] = [{wch:12},{wch:22},{wch:8},{wch:10},{wch:12},{wch:40}];
+  XLSX.utils.book_append_sheet(wb, labSheet, 'Labour log');
+
+  // Sheets 3-5: Materials / Equipment / Transportation across all jobs
+  function categorySheet(name, key) {
+    const rows = [['Description','Qty','Rate','Line total','Job']];
+    entries.forEach(en => {
+      (en.job[key] || []).forEach(it => {
+        rows.push([it.desc || '', it.qty || 0, it.rate || 0, (it.qty||0)*(it.rate||0), en.label]);
+      });
+    });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{wch:40},{wch:8},{wch:10},{wch:12},{wch:30}];
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  }
+  categorySheet('Materials', 'materials');
+  categorySheet('Equipment', 'equipment');
+  categorySheet('Transportation', 'transportation');
+
+  // Sheet 6: Quote history
+  const quotes = [['Date','Time','Format','Job']];
+  entries.forEach(en => {
+    (en.job.quoteGenerations || []).forEach(q => {
+      if (!q || !q.at) return;
+      const d = new Date(q.at);
+      quotes.push([d.toISOString().split('T')[0], d.toLocaleTimeString('en-CA', {hour:'2-digit', minute:'2-digit'}), (q.format || '').toUpperCase(), en.label]);
+    });
+  });
+  const qSheet = XLSX.utils.aoa_to_sheet(quotes);
+  qSheet['!cols'] = [{wch:12},{wch:10},{wch:10},{wch:30}];
+  XLSX.utils.book_append_sheet(wb, qSheet, 'Quote history');
+
+  const today = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb, 'JobQuoter_Full_' + today + '.xlsx');
+  status.textContent = '✓ Excel saved — 6 sheets covering everything.';
+}
+
 
 // =========================================================================
 // EMPLOYEES — per-job roster of named workers with hours per day. Auto-
@@ -1267,6 +1606,7 @@ function removeEmployee(id) {
   renderEmployees();
   autosave();
   syncEmployeesToLabour();
+  updateActualDaysDisplay();
 }
 function addDay(empId) {
   const e = (job.employees || []).find(x => x.id === empId);
@@ -1284,6 +1624,7 @@ function removeDay(empId, idx) {
   renderEmployees();
   autosave();
   syncEmployeesToLabour();
+  updateActualDaysDisplay();
 }
 function updateEmployee(empId, field, val) {
   const e = (job.employees || []).find(x => x.id === empId);
@@ -1298,6 +1639,7 @@ function updateEmployee(empId, field, val) {
   }
   autosave();
   syncEmployeesToLabour();
+  updateActualDaysDisplay();
 }
 function updateDay(empId, idx, field, val) {
   const e = (job.employees || []).find(x => x.id === empId);
@@ -1311,6 +1653,7 @@ function updateDay(empId, idx, field, val) {
   }
   autosave();
   syncEmployeesToLabour();
+  updateActualDaysDisplay();
 }
 function renderEmployees() {
   const container = document.getElementById('employeesList');
@@ -1525,6 +1868,7 @@ function _buildQuoteHTMLString() {
   html +=     '<div>Issued: ' + new Date().toISOString().split('T')[0] + '</div>';
   html +=   '</div>';
   html += '</div>';
+  if (job.estimatedDays) html += '<div style="font-style:italic;color:#1e3a5f;margin-bottom:4px">Estimated length: ' + _attr(job.estimatedDays) + (parseFloat(job.estimatedDays) === 1 ? ' day' : ' days') + '</div>';
   if (job._timeOnSite) html += '<div style="font-style:italic;color:#1e3a5f;margin-bottom:8px">Time on site: ' + _attr(job._timeOnSite) + '</div>';
   html += '<hr style="border:none;border-top:1px solid #ddd;margin:10px 0">';
   html += '<div style="font-weight:700;color:#1e3a5f">Quote for:</div>';
@@ -1581,6 +1925,7 @@ function generateQuoteHTML() {
     + '<style>body{font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:800px;margin:30px auto;padding:0 20px;color:#1a1a1a}</style>'
     + '</head><body>' + inner + '</body></html>';
   _triggerDownload(doc, _quoteFilenameBase() + '.html', 'text/html');
+  _logQuoteGeneration('html');
   status.textContent = '✓ HTML downloaded.';
 }
 
@@ -1598,6 +1943,7 @@ function generateQuoteWord() {
     + '<style>body{font-family:Arial,sans-serif;color:#1a1a1a}</style>'
     + '</head><body>' + inner + '</body></html>';
   _triggerDownload(doc, _quoteFilenameBase() + '.doc', 'application/msword');
+  _logQuoteGeneration('word');
   status.textContent = '✓ Word file downloaded (open in Word or Pages).';
 }
 
@@ -1666,6 +2012,7 @@ function generateQuoteText() {
     lines.push(job.quoteNotes);
   }
   _triggerDownload(lines.join('\n'), _quoteFilenameBase() + '.txt', 'text/plain;charset=utf-8');
+  _logQuoteGeneration('text');
   status.textContent = '✓ Plain text downloaded.';
 }
 
@@ -1736,6 +2083,7 @@ function generateQuoteExcel() {
   addItemsSheet('Equipment', job.equipment);
   addItemsSheet('Transportation', job.transportation);
   XLSX.writeFile(wb, _quoteFilenameBase() + '.xlsx');
+  _logQuoteGeneration('excel');
   status.textContent = '✓ Excel downloaded.';
 }
 
@@ -1772,7 +2120,7 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 
-<div style="text-align:center;font-size:11px;color:#bbb;padding:12px 0">Job Quoter v0.8</div>
+<div style="text-align:center;font-size:11px;color:#bbb;padding:12px 0">Job Quoter v0.9</div>
 
 </body>
 </html>
