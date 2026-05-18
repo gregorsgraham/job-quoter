@@ -71,6 +71,8 @@
     <button class="tab active" data-tab="job">Job</button>
     <button class="tab" data-tab="photos">Photos</button>
     <button class="tab" data-tab="quote">Quote</button>
+    <button class="tab" data-tab="notes">📝 Notes</button>
+    <button class="tab" data-tab="finished">✓ Finished</button>
     <button class="tab" data-tab="saved">Saved jobs</button>
     <button class="tab" data-tab="calendar">📅 Calendar</button>
     <button class="tab" data-tab="spreadsheet">📊 Spreadsheet</button>
@@ -132,18 +134,10 @@
       <button class="btn btn-secondary" onclick="addEmployee()" style="margin-top:8px">+ Add employee</button>
     </div>
 
-    <!-- VOICE NOTES — each tap creates a separate note. Notes stay in
-         the job with timestamps for the contractor to refer back to.
-         They don't land on the customer quote PDF. -->
-    <div class="card">
-      <div class="card-title">🎙 Voice notes</div>
-      <div class="hint">Dictate as many notes as you want. Each one is saved separately with a timestamp. They stay here for your reference — they don't appear on the customer quote.</div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap">
-        <button type="button" class="btn btn-primary" id="voiceNoteBtn" onclick="toggleVoiceNote()" style="flex:1;min-width:180px">🎙 New voice note</button>
-        <span id="voiceNoteStatus" class="hint" style="margin:0;flex:2;min-width:120px"></span>
-      </div>
-      <div id="voiceNotesList" style="margin-top:12px"></div>
-      <div id="voiceNotesEmpty" class="empty">No voice notes yet.</div>
+    <!-- Voice + typed notes now live on the dedicated Notes tab. -->
+    <div style="background:#f0f6ff;border:1px solid #b3d1f5;border-radius:7px;padding:8px 12px;margin-bottom:14px;font-size:12px;color:#1e3a5f;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span>📝 Voice and typed notes for this job →</span>
+      <button class="btn btn-secondary" onclick="switchTab('notes')" style="font-size:11px;padding:5px 12px">Open Notes tab</button>
     </div>
 
     <div class="card">
@@ -209,6 +203,13 @@
         <button class="btn btn-secondary" onclick="openPhotoPicker('library')" style="width:100%">🖼 Add from library (you'll pick a label after)</button>
       </div>
 
+      <!-- Bulk on-quote controls — pre-grid. Each thumb also has its
+           own toggle chip so you can fine-tune. -->
+      <div id="photoQuoteBatch" style="display:none;margin-top:12px;display:flex;align-items:center;gap:8px;font-size:12px;color:#555;flex-wrap:wrap">
+        <span>Photos on quote:</span>
+        <button class="btn btn-secondary" onclick="setAllPhotosOnQuote(true)"  style="font-size:11px;padding:5px 10px">📋 All on quote</button>
+        <button class="btn btn-secondary" onclick="setAllPhotosOnQuote(false)" style="font-size:11px;padding:5px 10px">None</button>
+      </div>
       <div id="photoGrid" class="photo-grid"></div>
       <div id="photosEmpty" class="empty">No photos yet. Tap a labeled button above to take one.</div>
     </div>
@@ -457,6 +458,35 @@
     </div>
   </section>
 
+  <!-- ===== NOTES TAB ===== -->
+  <section id="tab-notes" class="page">
+    <div class="card">
+      <div class="card-title">📝 Notes for this job</div>
+      <div class="hint">Voice or typed — your call. Notes stay with the job and don't appear on the customer quote. Use them to remember site conditions, customer comments, anything.</div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button type="button" class="btn btn-primary" id="voiceNoteBtn" onclick="toggleVoiceNote()" style="flex:1;min-width:140px">🎙 Voice note</button>
+        <button type="button" class="btn btn-secondary" onclick="addTypedNote()" style="flex:1;min-width:140px">📝 Typed note</button>
+      </div>
+      <div id="voiceNoteStatus" class="hint" style="margin-top:8px"></div>
+      <div id="voiceNotesList" style="margin-top:14px"></div>
+      <div id="voiceNotesEmpty" class="empty">No notes yet.</div>
+    </div>
+  </section>
+
+  <!-- ===== FINISHED TAB ===== -->
+  <section id="tab-finished" class="page">
+    <div class="card">
+      <div class="card-title">✓ Finished result for the client</div>
+      <div class="hint">When the job is done, generate a finished invoice/thank-you to send the client. Uses your actual hours (from the Employees card) and actual line items.</div>
+      <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:7px;padding:10px 12px;margin-top:12px;font-size:13px;color:#7a5c00">
+        🚧 <strong>Coming next:</strong> Mark this job complete on the Saved jobs tab (new "Job completed" checkbox), then come back here to generate the finished invoice and a short thank-you note for the client. The same five formats (PDF / Word / Excel / Plain text / HTML) will be available.
+      </div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn btn-secondary" onclick="alert('Coming in the next build — finished invoice generation is queued.')" style="flex:1">⬇ Generate finished invoice (soon)</button>
+      </div>
+    </div>
+  </section>
+
   <!-- ===== SAVED JOBS TAB ===== -->
   <section id="tab-saved" class="page">
     <div class="card">
@@ -500,7 +530,7 @@ function _emptyJob() {
     labour: [],         // [{desc, qty, rate}]
     equipment: [],      // [{desc, qty, rate}] — rented/owned tools (excavator etc.)
     transportation: [], // [{desc, qty, rate}] — mileage, fuel, delivery
-    employees: [],      // [{id, name, rate, days:[{date, hours}]}]
+    employees: [],      // [{id, name, billRate, payRate, estimatedHours, days:[{date, hours}]}]
     taxRate: 12, discount: 0, deposit: 0,
     quoteNotes: '',
     photos: [],
@@ -1005,6 +1035,27 @@ function toggleVoiceNote() {
   try { _voiceRec.start(); } catch(e) { status.textContent = '⚠ Could not start: ' + (e.message || e); }
 }
 
+// Add a brand-new typed note. User types directly into the textarea
+// on the rendered note card. Same delete/storage path as voice notes.
+function addTypedNote() {
+  if (!Array.isArray(job.voiceNotes)) job.voiceNotes = [];
+  job.voiceNotes.push({ id: 'tn_' + Date.now(), type: 'typed', text: '', timestamp: Date.now() });
+  renderVoiceNotes();
+  autosave();
+  // Focus the new textarea so the user can just start typing
+  setTimeout(() => {
+    const ta = document.querySelector('textarea[data-note-id]');
+    const all = document.querySelectorAll('textarea[data-note-id]');
+    if (all.length) all[all.length - 1].focus();
+  }, 50);
+}
+function updateTypedNote(id, val) {
+  const n = (job.voiceNotes || []).find(x => x.id === id);
+  if (!n) return;
+  n.text = val;
+  autosave();
+}
+
 function renderVoiceNotes() {
   const list = document.getElementById('voiceNotesList');
   const empty = document.getElementById('voiceNotesEmpty');
@@ -1016,14 +1067,18 @@ function renderVoiceNotes() {
     return;
   }
   empty.style.display = 'none';
-  list.innerHTML = notes.map((n, i) => {
+  list.innerHTML = notes.map((n) => {
     const t = n.timestamp ? new Date(n.timestamp).toLocaleString('en-CA', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
-    const live = (n.id === _voicePendingId) ? '<span style="background:#c62828;color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:99px;margin-left:6px;animation:pulse 1.2s infinite">● LIVE</span>' : '';
-    const safeText = _attr(n.text || '(empty)').replace(/\n/g, '<br>');
+    const live = (n.id === _voicePendingId) ? '<span style="background:#c62828;color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:99px;margin-left:6px">● LIVE</span>' : '';
+    const isTyped = (n.type === 'typed');
+    const icon = isTyped ? '📝' : '🎙';
+    const body = isTyped
+      ? '<textarea data-note-id="' + n.id + '" oninput="updateTypedNote(\'' + n.id + '\', this.value)" placeholder="Type your note…" style="width:100%;min-height:60px;border:1px solid #c8c4bd;border-radius:6px;padding:8px;font-size:13px;font-family:inherit;color:#1a1a1a;background:#fff">' + _attr(n.text || '') + '</textarea>'
+      : '<div style="font-size:13px;color:#1a1a1a;line-height:1.5;word-wrap:break-word">' + _attr(n.text || '(empty)').replace(/\n/g, '<br>') + '</div>';
     return '<div style="background:#f8f8f6;border:1px solid #ddd;border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start">'
       + '<div style="flex:1;min-width:0">'
-      +   '<div style="font-size:11px;color:#888;margin-bottom:4px">🎙 ' + t + live + '</div>'
-      +   '<div style="font-size:13px;color:#1a1a1a;line-height:1.5;word-wrap:break-word">' + safeText + '</div>'
+      +   '<div style="font-size:11px;color:#888;margin-bottom:4px">' + icon + ' ' + t + live + '</div>'
+      +   body
       + '</div>'
       + '<button onclick="deleteVoiceNote(\'' + n.id + '\')" title="Delete this note" style="background:none;border:none;color:#c62828;font-size:20px;cursor:pointer;line-height:1;padding:0;flex-shrink:0">×</button>'
       + '</div>';
@@ -1123,13 +1178,16 @@ function compressImage(src, quality, maxW, maxH) {
 function renderPhotos() {
   const grid = document.getElementById('photoGrid');
   const empty = document.getElementById('photosEmpty');
+  const batch = document.getElementById('photoQuoteBatch');
   if (!photos.length) {
     grid.innerHTML = '';
     empty.style.display = 'block';
+    if (batch) batch.style.display = 'none';
     updateTimeOnSite();
     return;
   }
   empty.style.display = 'none';
+  if (batch) batch.style.display = 'flex';
   // Colour map for label badges — matches the capture-button colours.
   const labelStyles = {
     before:  { bg:'#c85a00', fg:'#fff' },
@@ -1147,18 +1205,36 @@ function renderPhotos() {
       const txt = p.label.charAt(0).toUpperCase() + p.label.slice(1);
       labelChip = '<div onclick="event.stopPropagation();openLabelModal(' + i + ')" title="Tap to change label" style="position:absolute;bottom:4px;left:4px;background:' + s.bg + ';color:' + s.fg + ';font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;line-height:1;cursor:pointer">' + txt + '</div>';
     } else {
-      // Unlabeled — tappable amber chip prompting the user to label it
       labelChip = '<div onclick="event.stopPropagation();openLabelModal(' + i + ')" title="Tap to label" style="position:absolute;bottom:4px;left:4px;background:#fff8e1;color:#c85a00;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;line-height:1;cursor:pointer;border:1px solid #ffe082">Tap to label</div>';
     }
+    // On-quote chip — bottom-right. Independent of the label. Grey when
+    // off, blue when on. Tap to toggle.
+    const onQ = !!p.onQuote;
+    const qChip = '<div onclick="event.stopPropagation();togglePhotoOnQuote(' + i + ')" title="' + (onQ ? 'On quote (tap to remove)' : 'Not on quote (tap to add)') + '" style="position:absolute;bottom:4px;right:36px;background:' + (onQ ? '#1a5999' : '#fff') + ';color:' + (onQ ? '#fff' : '#888') + ';font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;line-height:1;cursor:pointer;border:1px solid ' + (onQ ? '#1a5999' : '#bbb') + '">📋 ' + (onQ ? 'Quote' : '+Quote') + '</div>';
     return '<div class="photo-card">'
       + '<img src="' + p.src + '" onclick="viewPhoto(' + i + ')">'
       + (t ? '<div class="photo-time">🕒 ' + t + '</div>' : '')
       + labelChip
+      + qChip
       + '<button class="photo-del" onclick="removePhoto(' + i + ')" title="Remove">×</button>'
       + '</div>';
   }).join('');
   updateTimeOnSite();
   renderQuotePhotoStrip();
+}
+
+// Toggle a single photo's on-quote flag.
+function togglePhotoOnQuote(i) {
+  if (!photos[i]) return;
+  photos[i].onQuote = !photos[i].onQuote;
+  renderPhotos();
+  autosave();
+}
+// Batch helpers — wired to the master buttons above the grid.
+function setAllPhotosOnQuote(val) {
+  photos.forEach(p => { p.onQuote = !!val; });
+  renderPhotos();
+  autosave();
 }
 
 // Compute time on site — overrides win if both are set, otherwise
@@ -1275,23 +1351,43 @@ function renderSavedJobs() {
     const mCount = (entry.job && entry.job.materials || []).length;
     const lCount = (entry.job && entry.job.labour || []).length;
     const sent = !!entry.sent;
-    const sentBadge = sent
-      ? '<span style="display:inline-block;background:#2d7a3a;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;letter-spacing:0.04em;margin-left:8px;vertical-align:middle">✓ SENT</span>'
-      : '';
+    const done = !!entry.completed;
+    const badges = (sent ? '<span style="display:inline-block;background:#1a5999;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;margin-left:6px">QUOTE SENT</span>' : '')
+                 + (done ? '<span style="display:inline-block;background:#2d7a3a;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;margin-left:6px">✓ COMPLETED</span>' : '');
+    const subBits = [];
+    subBits.push(new Date(entry.savedAt).toLocaleString());
+    subBits.push(phCount + ' photo' + (phCount===1?'':'s'));
+    subBits.push(mCount + ' material, ' + lCount + ' labour');
+    if (entry.sentAt) subBits.push('quote sent ' + new Date(entry.sentAt).toLocaleDateString('en-CA'));
+    if (entry.completedAt) subBits.push('completed ' + new Date(entry.completedAt).toLocaleDateString('en-CA'));
     return '<div class="saved-job">'
       + '<div class="info">'
-        + '<b>' + _attr(entry.label) + '</b>' + sentBadge
-        + '<div class="sub">' + new Date(entry.savedAt).toLocaleString() + ' · ' + phCount + ' photo' + (phCount===1?'':'s') + ' · ' + mCount + ' material, ' + lCount + ' labour' + (entry.sentAt ? ' · sent ' + new Date(entry.sentAt).toLocaleDateString('en-CA') : '') + '</div>'
+        + '<b>' + _attr(entry.label) + '</b>' + badges
+        + '<div class="sub">' + subBits.join(' · ') + '</div>'
         + '<div class="saved-job-actions">'
           + '<button class="btn btn-primary" onclick="loadJob(\'' + entry.id + '\')" style="font-size:12px;padding:6px 12px">Load</button>'
-          + '<label style="display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid ' + (sent ? '#b2dfb4' : '#ddd') + ';border-radius:5px;padding:5px 10px;font-size:12px;color:' + (sent ? '#2d7a3a' : '#555') + ';cursor:pointer;font-weight:600">'
-            + '<input type="checkbox" ' + (sent ? 'checked' : '') + ' onchange="setJobSent(\'' + entry.id + '\', this.checked)" style="width:14px;height:14px;cursor:pointer;accent-color:#2d7a3a"> Sent to customer'
+          + '<label style="display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid ' + (sent ? '#b3d1f5' : '#ddd') + ';border-radius:5px;padding:5px 10px;font-size:12px;color:' + (sent ? '#1a5999' : '#555') + ';cursor:pointer;font-weight:600">'
+            + '<input type="checkbox" ' + (sent ? 'checked' : '') + ' onchange="setJobSent(\'' + entry.id + '\', this.checked)" style="width:14px;height:14px;cursor:pointer;accent-color:#1a5999"> Quote sent to customer'
+          + '</label>'
+          + '<label style="display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid ' + (done ? '#b2dfb4' : '#ddd') + ';border-radius:5px;padding:5px 10px;font-size:12px;color:' + (done ? '#2d7a3a' : '#555') + ';cursor:pointer;font-weight:600">'
+            + '<input type="checkbox" ' + (done ? 'checked' : '') + ' onchange="setJobCompleted(\'' + entry.id + '\', this.checked)" style="width:14px;height:14px;cursor:pointer;accent-color:#2d7a3a"> Job completed'
           + '</label>'
           + '<button class="btn btn-red" onclick="deleteJob(\'' + entry.id + '\')" style="font-size:12px;padding:6px 12px">Delete</button>'
         + '</div>'
       + '</div>'
     + '</div>';
   }).join('');
+}
+function setJobCompleted(id, checked) {
+  let arr = [];
+  try { arr = JSON.parse(localStorage.getItem('jq_archive') || '[]'); } catch(e){}
+  const entry = arr.find(e => e.id === id);
+  if (!entry) return;
+  entry.completed = !!checked;
+  if (entry.completed && !entry.completedAt) entry.completedAt = new Date().toISOString();
+  if (!entry.completed) delete entry.completedAt;
+  try { localStorage.setItem('jq_archive', JSON.stringify(arr)); } catch(e){}
+  renderSavedJobs();
 }
 
 // Direct-state setter for the "Sent to customer" checkbox on each saved
@@ -1507,14 +1603,15 @@ async function generateQuotePDF() {
       y += 6;
     }
 
-    // Photos pages — grouped by label so the customer sees Before
-    // photos together, then During, then After, then Receipts, then
-    // Other / unlabeled. One photo per page with the label as a header.
-    if (photos.length) {
+    // Photos pages — only the ones the user explicitly added to the
+    // quote (p.onQuote === true). Grouped by label so the customer
+    // sees Before photos together, then During, etc.
+    const quotePhotos = photos.filter(p => p && p.onQuote);
+    if (quotePhotos.length) {
       const order = ['before','during','after','receipt','tpain','other',null];
       const grouped = [];
       order.forEach(lbl => {
-        photos.forEach((p, i) => { if ((p.label || null) === lbl) grouped.push({ p, i, lbl }); });
+        quotePhotos.forEach((p, i) => { if ((p.label || null) === lbl) grouped.push({ p, i, lbl }); });
       });
       const sectionTitle = {
         before: 'Before', during: 'During', after: 'After',
@@ -1862,7 +1959,9 @@ function addEmployee() {
   job.employees.push({
     id: 'emp_' + Date.now(),
     name: '',
-    rate: 30,
+    billRate: 60,        // what you charge the customer per hour
+    payRate: 30,         // what you pay the employee per hour (internal)
+    estimatedHours: 0,   // for the quote BEFORE any days have been logged
     days: [{ date: today, hours: 0 }]
   });
   renderEmployees();
@@ -2391,7 +2490,7 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 
-<div style="text-align:center;font-size:11px;color:#bbb;padding:12px 0">Job Quoter v1.2</div>
+<div style="text-align:center;font-size:11px;color:#bbb;padding:12px 0">Job Quoter v1.3</div>
 
 </body>
 </html>
