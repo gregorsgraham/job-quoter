@@ -181,7 +181,7 @@
 
     <div class="card">
       <div class="card-title">📷 Site photos</div>
-      <div class="hint">Photos are timestamped automatically when you take them. Tap a label that fits what you're shooting. All photos get saved with the job by default — choose individually which ones go on the <strong>📋 Quote</strong> or the <strong>🏁 Finished</strong> using the chips on each thumbnail.</div>
+      <div class="hint">Photos get timestamped automatically. Every photo is saved with the job. To put a photo on the quote, tap <strong>Add to quote</strong> on its thumbnail.</div>
 
       <!-- Per-label camera inputs (capture=environment opens rear camera
            on mobile). Each one stamps the photo with its label. From-
@@ -207,16 +207,9 @@
         <button class="btn btn-secondary" onclick="openPhotoPicker('library')" style="width:100%">🖼 Add from library (you'll pick a label after)</button>
       </div>
 
-      <!-- Bulk on-quote controls — pre-grid. Each thumb also has its
-           own toggle chip so you can fine-tune. -->
-      <div id="photoQuoteBatch" style="display:none;margin-top:12px;display:flex;align-items:center;gap:8px;font-size:12px;color:#555;flex-wrap:wrap">
-        <span>Bulk:</span>
-        <button class="btn btn-secondary" onclick="setAllPhotosOnQuote(true)"     style="font-size:11px;padding:5px 10px">📋 All → Quote</button>
-        <button class="btn btn-secondary" onclick="setAllPhotosOnQuote(false)"    style="font-size:11px;padding:5px 10px">Clear Quote</button>
-        <span style="opacity:0.5">·</span>
-        <button class="btn btn-secondary" onclick="setAllPhotosOnFinished(true)"  style="font-size:11px;padding:5px 10px">🏁 All → Finished</button>
-        <button class="btn btn-secondary" onclick="setAllPhotosOnFinished(false)" style="font-size:11px;padding:5px 10px">Clear Finished</button>
-      </div>
+      <!-- Bulk buttons row removed — the per-thumbnail 📋 +Quote chip
+           is the single, clear action. -->
+      <div id="photoQuoteBatch" style="display:none"></div>
       <div id="photoGrid" class="photo-grid"></div>
       <div id="photosEmpty" class="empty">No photos yet. Tap a labeled button above to take one.</div>
     </div>
@@ -1217,20 +1210,18 @@ function renderPhotos() {
     } else {
       labelChip = '<div onclick="event.stopPropagation();openLabelModal(' + i + ')" title="Tap to label" style="position:absolute;bottom:4px;left:4px;background:#fff8e1;color:#c85a00;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;line-height:1;cursor:pointer;border:1px solid #ffe082">Tap to label</div>';
     }
-    // Destination chips — bottom-right of each photo. Two independent
-    // toggles: +Quote (blue) and +Finished (green). Default off — the
-    // user explicitly picks which photos go where. Photos are always
-    // saved with the job either way.
+    // Single chip on each thumbnail: "Add to quote" / "On quote".
+    // Tap to toggle. Photos always save with the job either way.
+    // The Finished destination will come back when the finished invoice
+    // generator is built — adding it now without the generator was
+    // confusing.
     const onQ = !!p.onQuote;
-    const onF = !!p.onFinished;
-    const qChip = '<div onclick="event.stopPropagation();togglePhotoOnQuote(' + i + ')" title="' + (onQ ? 'On quote (tap to remove)' : 'Not on quote (tap to add)') + '" style="position:absolute;bottom:4px;right:74px;background:' + (onQ ? '#1a5999' : '#fff') + ';color:' + (onQ ? '#fff' : '#888') + ';font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;line-height:1;cursor:pointer;border:1px solid ' + (onQ ? '#1a5999' : '#bbb') + '">📋 ' + (onQ ? 'Quote' : '+Quote') + '</div>';
-    const fChip = '<div onclick="event.stopPropagation();togglePhotoOnFinished(' + i + ')" title="' + (onF ? 'On finished (tap to remove)' : 'Not on finished (tap to add)') + '" style="position:absolute;bottom:4px;right:36px;background:' + (onF ? '#2d7a3a' : '#fff') + ';color:' + (onF ? '#fff' : '#888') + ';font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;line-height:1;cursor:pointer;border:1px solid ' + (onF ? '#2d7a3a' : '#bbb') + '">🏁 ' + (onF ? 'Final' : '+Final') + '</div>';
+    const qChip = '<div onclick="event.stopPropagation();togglePhotoOnQuote(' + i + ')" title="' + (onQ ? 'On the quote (tap to remove)' : 'Add to the quote') + '" style="position:absolute;bottom:4px;right:36px;background:' + (onQ ? '#1a5999' : '#fff') + ';color:' + (onQ ? '#fff' : '#555') + ';font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;line-height:1;cursor:pointer;border:1px solid ' + (onQ ? '#1a5999' : '#bbb') + '">' + (onQ ? '✓ On quote' : 'Add to quote') + '</div>';
     return '<div class="photo-card">'
       + '<img src="' + p.src + '" onclick="viewPhoto(' + i + ')">'
       + (t ? '<div class="photo-time">🕒 ' + t + '</div>' : '')
       + labelChip
       + qChip
-      + fChip
       + '<button class="photo-del" onclick="removePhoto(' + i + ')" title="Remove">×</button>'
       + '</div>';
   }).join('');
@@ -2520,7 +2511,7 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 
-<div style="text-align:center;font-size:11px;color:#bbb;padding:12px 0">Job Quoter v1.4</div>
+<div style="text-align:center;font-size:11px;color:#bbb;padding:12px 0">Job Quoter v1.5</div>
 
 </body>
 </html>

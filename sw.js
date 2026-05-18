@@ -5,7 +5,7 @@
 // CACHE_VERSION whenever index.html or manifest.json change so the new
 // shell is fetched instead of served from the old cache.
 
-const CACHE_VERSION = 'jobquoter-v14';
+const CACHE_VERSION = 'jobquoter-v15';
 const SHELL = [
   './',
   './index.html',
