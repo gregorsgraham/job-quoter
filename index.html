@@ -97,8 +97,12 @@
       <div class="field"><label>Email</label><input id="customerEmail" type="email" placeholder="e.g. john@example.com" oninput="autosave()"></div>
       <div class="field"><label>Site address</label><input id="siteAddress" placeholder="e.g. 123 Main St, Nelson BC" oninput="autosave();updateActiveJobBanner()"></div>
       <div class="row c2">
-        <div class="field"><label>Job date</label><input id="jobDate" type="date" oninput="autosave()"></div>
+        <div class="field"><label>Quote date <span class="small">(when you visited to quote)</span></label><input id="quoteDate" type="date" oninput="autosave()"></div>
+        <div class="field"><label>Job date <span class="small">(when the work happens)</span></label><input id="jobDate" type="date" oninput="autosave()"></div>
+      </div>
+      <div class="row c2">
         <div class="field"><label>Quote # <span class="small">(optional)</span></label><input id="quoteNumber" placeholder="auto" oninput="autosave()"></div>
+        <div></div>
       </div>
       <div class="row c2">
         <div class="field"><label>Estimated days <span class="small">(your estimate — lands on the quote)</span></label><input id="estimatedDays" type="number" step="0.5" placeholder="e.g. 3" oninput="autosave();updateActualDaysDisplay()"></div>
@@ -177,7 +181,7 @@
 
     <div class="card">
       <div class="card-title">📷 Site photos</div>
-      <div class="hint">Photos are timestamped automatically when you take them. Tap the label that matches what you're shooting — labels appear on each thumbnail and group on the quote PDF.</div>
+      <div class="hint">Photos are timestamped automatically when you take them. Tap a label that fits what you're shooting. All photos get saved with the job by default — choose individually which ones go on the <strong>📋 Quote</strong> or the <strong>🏁 Finished</strong> using the chips on each thumbnail.</div>
 
       <!-- Per-label camera inputs (capture=environment opens rear camera
            on mobile). Each one stamps the photo with its label. From-
@@ -206,9 +210,12 @@
       <!-- Bulk on-quote controls — pre-grid. Each thumb also has its
            own toggle chip so you can fine-tune. -->
       <div id="photoQuoteBatch" style="display:none;margin-top:12px;display:flex;align-items:center;gap:8px;font-size:12px;color:#555;flex-wrap:wrap">
-        <span>Photos on quote:</span>
-        <button class="btn btn-secondary" onclick="setAllPhotosOnQuote(true)"  style="font-size:11px;padding:5px 10px">📋 All on quote</button>
-        <button class="btn btn-secondary" onclick="setAllPhotosOnQuote(false)" style="font-size:11px;padding:5px 10px">None</button>
+        <span>Bulk:</span>
+        <button class="btn btn-secondary" onclick="setAllPhotosOnQuote(true)"     style="font-size:11px;padding:5px 10px">📋 All → Quote</button>
+        <button class="btn btn-secondary" onclick="setAllPhotosOnQuote(false)"    style="font-size:11px;padding:5px 10px">Clear Quote</button>
+        <span style="opacity:0.5">·</span>
+        <button class="btn btn-secondary" onclick="setAllPhotosOnFinished(true)"  style="font-size:11px;padding:5px 10px">🏁 All → Finished</button>
+        <button class="btn btn-secondary" onclick="setAllPhotosOnFinished(false)" style="font-size:11px;padding:5px 10px">Clear Finished</button>
       </div>
       <div id="photoGrid" class="photo-grid"></div>
       <div id="photosEmpty" class="empty">No photos yet. Tap a labeled button above to take one.</div>
@@ -520,7 +527,7 @@ let photos = []; // [{src, name, timestamp, kb}]
 function _emptyJob() {
   return {
     customerName: '', customerPhone: '', customerEmail: '',
-    siteAddress: '', jobDate: '', quoteNumber: '',
+    siteAddress: '', quoteDate: '', jobDate: '', quoteNumber: '',
     jobDescription: '',
     estimatedDays: '',  // user's estimate at quote time
     timeArriveOverride: '',  // HH:MM — overrides first photo timestamp
@@ -575,6 +582,7 @@ function collectFromDom() {
   job.customerPhone = v('customerPhone');
   job.customerEmail = v('customerEmail');
   job.siteAddress = v('siteAddress');
+  job.quoteDate = v('quoteDate');
   job.jobDate = v('jobDate');
   job.quoteNumber = v('quoteNumber');
   job.jobDescription = v('jobDescription');
@@ -664,7 +672,7 @@ function loadJob() {
   recalc();
 }
 function hydrateJobToDom() {
-  ['customerName','customerPhone','customerEmail','siteAddress','jobDate','quoteNumber','jobDescription','quoteNotes','estimatedDays','timeArriveOverride','timeLeftOverride'].forEach(k => {
+  ['customerName','customerPhone','customerEmail','siteAddress','quoteDate','jobDate','quoteNumber','jobDescription','quoteNotes','estimatedDays','timeArriveOverride','timeLeftOverride'].forEach(k => {
     const el = document.getElementById(k);
     if (el) el.value = job[k] || '';
   });
@@ -1104,9 +1112,11 @@ function renderQuotePhotoStrip() {
   const card = document.getElementById('quotePhotosCard');
   const strip = document.getElementById('quotePhotoStrip');
   if (!card || !strip) return;
-  if (!photos.length) {
-    card.style.display = 'none';
-    strip.innerHTML = '';
+  const onQuote = photos.filter(p => p && p.onQuote);
+  if (!onQuote.length) {
+    // No photos picked for the quote — show a hint instead of nothing.
+    card.style.display = 'block';
+    strip.innerHTML = '<div class="empty" style="padding:6px 0">No photos picked for this quote yet. Go to the Photos tab and tap the <strong>📋 +Quote</strong> chip on the ones you want to include.</div>';
     return;
   }
   card.style.display = 'block';
@@ -1114,7 +1124,7 @@ function renderQuotePhotoStrip() {
     before:'#c85a00', during:'#1a5999', after:'#2d7a3a',
     receipt:'#7a5c00', other:'#7b5ea7'
   };
-  strip.innerHTML = photos.map((p, i) => {
+  strip.innerHTML = onQuote.map((p) => {
     const colour = p.label ? (labelColours[p.label] || '#555') : '#aaa';
     const tag = p.label ? p.label.toUpperCase() : '?';
     return '<div class="photo-card" onclick="switchTab(\'photos\')" style="cursor:pointer">'
@@ -1207,15 +1217,20 @@ function renderPhotos() {
     } else {
       labelChip = '<div onclick="event.stopPropagation();openLabelModal(' + i + ')" title="Tap to label" style="position:absolute;bottom:4px;left:4px;background:#fff8e1;color:#c85a00;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;line-height:1;cursor:pointer;border:1px solid #ffe082">Tap to label</div>';
     }
-    // On-quote chip — bottom-right. Independent of the label. Grey when
-    // off, blue when on. Tap to toggle.
+    // Destination chips — bottom-right of each photo. Two independent
+    // toggles: +Quote (blue) and +Finished (green). Default off — the
+    // user explicitly picks which photos go where. Photos are always
+    // saved with the job either way.
     const onQ = !!p.onQuote;
-    const qChip = '<div onclick="event.stopPropagation();togglePhotoOnQuote(' + i + ')" title="' + (onQ ? 'On quote (tap to remove)' : 'Not on quote (tap to add)') + '" style="position:absolute;bottom:4px;right:36px;background:' + (onQ ? '#1a5999' : '#fff') + ';color:' + (onQ ? '#fff' : '#888') + ';font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;line-height:1;cursor:pointer;border:1px solid ' + (onQ ? '#1a5999' : '#bbb') + '">📋 ' + (onQ ? 'Quote' : '+Quote') + '</div>';
+    const onF = !!p.onFinished;
+    const qChip = '<div onclick="event.stopPropagation();togglePhotoOnQuote(' + i + ')" title="' + (onQ ? 'On quote (tap to remove)' : 'Not on quote (tap to add)') + '" style="position:absolute;bottom:4px;right:74px;background:' + (onQ ? '#1a5999' : '#fff') + ';color:' + (onQ ? '#fff' : '#888') + ';font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;line-height:1;cursor:pointer;border:1px solid ' + (onQ ? '#1a5999' : '#bbb') + '">📋 ' + (onQ ? 'Quote' : '+Quote') + '</div>';
+    const fChip = '<div onclick="event.stopPropagation();togglePhotoOnFinished(' + i + ')" title="' + (onF ? 'On finished (tap to remove)' : 'Not on finished (tap to add)') + '" style="position:absolute;bottom:4px;right:36px;background:' + (onF ? '#2d7a3a' : '#fff') + ';color:' + (onF ? '#fff' : '#888') + ';font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;line-height:1;cursor:pointer;border:1px solid ' + (onF ? '#2d7a3a' : '#bbb') + '">🏁 ' + (onF ? 'Final' : '+Final') + '</div>';
     return '<div class="photo-card">'
       + '<img src="' + p.src + '" onclick="viewPhoto(' + i + ')">'
       + (t ? '<div class="photo-time">🕒 ' + t + '</div>' : '')
       + labelChip
       + qChip
+      + fChip
       + '<button class="photo-del" onclick="removePhoto(' + i + ')" title="Remove">×</button>'
       + '</div>';
   }).join('');
@@ -1223,16 +1238,27 @@ function renderPhotos() {
   renderQuotePhotoStrip();
 }
 
-// Toggle a single photo's on-quote flag.
+// Toggle a single photo's on-quote / on-finished flags. Independent —
+// a photo can go to neither, one, or both destinations.
 function togglePhotoOnQuote(i) {
   if (!photos[i]) return;
   photos[i].onQuote = !photos[i].onQuote;
   renderPhotos();
   autosave();
 }
-// Batch helpers — wired to the master buttons above the grid.
+function togglePhotoOnFinished(i) {
+  if (!photos[i]) return;
+  photos[i].onFinished = !photos[i].onFinished;
+  renderPhotos();
+  autosave();
+}
 function setAllPhotosOnQuote(val) {
   photos.forEach(p => { p.onQuote = !!val; });
+  renderPhotos();
+  autosave();
+}
+function setAllPhotosOnFinished(val) {
+  photos.forEach(p => { p.onFinished = !!val; });
   renderPhotos();
   autosave();
 }
@@ -2234,8 +2260,9 @@ function _buildQuoteHTMLString() {
   html +=   '<div style="text-align:right">';
   html +=     '<div style="font-weight:700;color:#1e3a5f;font-size:15px">QUOTE</div>';
   html +=     '<div>Quote #: ' + _attr(job.quoteNumber || 'auto') + '</div>';
-  if (job.jobDate) html += '<div>Job date: ' + _attr(job.jobDate) + '</div>';
-  html +=     '<div>Issued: ' + new Date().toISOString().split('T')[0] + '</div>';
+  if (job.quoteDate) html += '<div>Quote date: ' + _attr(job.quoteDate) + '</div>';
+  if (job.jobDate)   html += '<div>Job date: ' + _attr(job.jobDate) + '</div>';
+  if (!job.quoteDate && !job.jobDate) html += '<div>Issued: ' + new Date().toISOString().split('T')[0] + '</div>';
   html +=   '</div>';
   html += '</div>';
   if (job.estimatedDays) html += '<div style="font-style:italic;color:#1e3a5f;margin-bottom:4px">Estimated length: ' + _attr(job.estimatedDays) + (parseFloat(job.estimatedDays) === 1 ? ' day' : ' days') + '</div>';
@@ -2477,10 +2504,13 @@ document.addEventListener('click', e => {
 // =========================================================================
 document.addEventListener('DOMContentLoaded', () => {
   loadJob();
-  if (!document.getElementById('jobDate').value) {
-    document.getElementById('jobDate').value = new Date().toISOString().split('T')[0];
+  if (!document.getElementById('quoteDate').value) {
+    document.getElementById('quoteDate').value = new Date().toISOString().split('T')[0];
     autosave();
   }
+  // jobDate is NOT auto-set — the user fills it in once they know when
+  // the work will actually happen. Quote date defaults to today
+  // because that's when the quote is being prepared.
 });
 
 if ('serviceWorker' in navigator) {
@@ -2490,7 +2520,7 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 
-<div style="text-align:center;font-size:11px;color:#bbb;padding:12px 0">Job Quoter v1.3</div>
+<div style="text-align:center;font-size:11px;color:#bbb;padding:12px 0">Job Quoter v1.4</div>
 
 </body>
 </html>
