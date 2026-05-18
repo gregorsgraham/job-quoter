@@ -68,8 +68,8 @@
   </header>
 
   <nav class="tabs" id="tabs">
-    <button class="tab active" data-tab="photos">Photos</button>
-    <button class="tab" data-tab="job">Job</button>
+    <button class="tab active" data-tab="job">Job</button>
+    <button class="tab" data-tab="photos">Photos</button>
     <button class="tab" data-tab="quote">Quote</button>
     <button class="tab" data-tab="saved">Saved jobs</button>
     <button class="tab" data-tab="calendar">📅 Calendar</button>
@@ -77,7 +77,15 @@
   </nav>
 
   <!-- ===== JOB TAB ===== -->
-  <section id="tab-job" class="page">
+  <section id="tab-job" class="page active">
+
+    <!-- Quick actions at the TOP too — same buttons sit at the bottom
+         of the tab as well, so the user doesn't have to scroll down. -->
+    <div class="btn-row" style="margin-bottom:12px">
+      <button class="btn btn-primary" onclick="startNewJob()" style="flex:1">+ Start new job</button>
+      <button class="btn btn-secondary" onclick="archiveCurrentJob()" style="flex:1">💾 Save this job to archive</button>
+    </div>
+
     <div class="card">
       <div class="card-title">Customer &amp; site</div>
       <div class="row c2">
@@ -98,12 +106,17 @@
         <label>Job description / scope</label>
         <textarea id="jobDescription" placeholder="What's the customer hiring you for? Be specific — this lands on the quote." oninput="autosave()"></textarea>
       </div>
-      <!-- Auto-calculated time on site, from earliest to latest photo
-           timestamp. Hidden when there are fewer than 2 photos. Re-renders
-           on photo add/remove via updateTimeOnSite(). -->
-      <div id="timeOnSiteBlock" style="display:none;background:#f0f6ff;border:1px solid #b3d1f5;border-radius:7px;padding:10px 12px;margin-top:6px;font-size:13px;color:#1e3a5f">
-        <strong>⏱ Time on site:</strong> <span id="timeOnSiteText">—</span>
-        <div class="hint" style="margin-top:4px;color:#555">Calculated from your first to last photo timestamp. Lands on the quote PDF too.</div>
+      <!-- Time on site — auto-calculated from photo timestamps, but
+           the user can override. Useful if the first photo wasn't
+           taken right when they arrived. -->
+      <div style="background:#f0f6ff;border:1px solid #b3d1f5;border-radius:7px;padding:10px 12px;margin-top:6px">
+        <div style="font-size:13px;color:#1e3a5f;font-weight:600;margin-bottom:6px">⏱ Time on site</div>
+        <div id="timeOnSiteAuto" class="hint" style="margin-bottom:6px">Auto: <span id="timeOnSiteText">—</span></div>
+        <div class="row c2">
+          <div class="field"><label>Arrived</label><input id="timeArriveOverride" type="time" oninput="autosave();updateTimeOnSite()"></div>
+          <div class="field"><label>Left</label><input id="timeLeftOverride" type="time" oninput="autosave();updateTimeOnSite()"></div>
+        </div>
+        <div class="hint" style="margin-top:4px">Set both to override the auto-calculated times. Leave blank to use the photo timestamps. The result lands on the quote.</div>
       </div>
     </div>
 
@@ -153,7 +166,7 @@
   </section>
 
   <!-- ===== PHOTOS TAB ===== -->
-  <section id="tab-photos" class="page active">
+  <section id="tab-photos" class="page">
 
     <!-- Job switcher modal — popped from the active-job banner. Lists
          the current job + every saved one. Picking a saved one loads
@@ -198,6 +211,28 @@
 
       <div id="photoGrid" class="photo-grid"></div>
       <div id="photosEmpty" class="empty">No photos yet. Tap a labeled button above to take one.</div>
+    </div>
+
+    <!-- ACTIVE JOB BANNER — moved here (below site photos) per user
+         feedback. Photos always belong to whichever job is active;
+         tap Switch to load another. -->
+    <div id="activeJobBanner" style="background:#f0f6ff;border:2px solid #b3d1f5;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="flex:1;min-width:140px">
+        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.04em">Photos for active job</div>
+        <div id="activeJobName" style="font-size:14px;font-weight:700;color:#1e3a5f">—</div>
+      </div>
+      <button class="btn btn-secondary" onclick="openJobSwitcher()" style="font-size:12px;padding:7px 12px">Switch job ▾</button>
+    </div>
+
+    <!-- Job switcher modal -->
+    <div id="jobSwitcherModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:600;align-items:center;justify-content:center">
+      <div style="background:#fff;border-radius:12px;padding:20px;margin:20px;max-width:420px;width:100%;max-height:80vh;overflow-y:auto">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:15px;font-weight:700;color:#1e3a5f">Switch active job</div>
+          <button onclick="document.getElementById('jobSwitcherModal').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#888">×</button>
+        </div>
+        <div id="jobSwitcherList"></div>
+      </div>
     </div>
 
     <!-- Label-picker modal — opens when a photo comes from "From
@@ -458,6 +493,8 @@ function _emptyJob() {
     siteAddress: '', jobDate: '', quoteNumber: '',
     jobDescription: '',
     estimatedDays: '',  // user's estimate at quote time
+    timeArriveOverride: '',  // HH:MM — overrides first photo timestamp
+    timeLeftOverride: '',    // HH:MM — overrides last photo timestamp
     quoteGenerations: [],  // [{at, format}] — log of when quotes were generated
     materials: [],      // [{desc, qty, rate}]
     labour: [],         // [{desc, qty, rate}]
@@ -512,6 +549,8 @@ function collectFromDom() {
   job.quoteNumber = v('quoteNumber');
   job.jobDescription = v('jobDescription');
   job.estimatedDays = v('estimatedDays');
+  job.timeArriveOverride = v('timeArriveOverride');
+  job.timeLeftOverride = v('timeLeftOverride');
   job.taxRate = parseFloat(v('taxRate')) || 0;
   job.discount = parseFloat(v('discount')) || 0;
   job.deposit = parseFloat(v('deposit')) || 0;
@@ -595,7 +634,7 @@ function loadJob() {
   recalc();
 }
 function hydrateJobToDom() {
-  ['customerName','customerPhone','customerEmail','siteAddress','jobDate','quoteNumber','jobDescription','quoteNotes','estimatedDays'].forEach(k => {
+  ['customerName','customerPhone','customerEmail','siteAddress','jobDate','quoteNumber','jobDescription','quoteNotes','estimatedDays','timeArriveOverride','timeLeftOverride'].forEach(k => {
     const el = document.getElementById(k);
     if (el) el.value = job[k] || '';
   });
@@ -1122,40 +1161,56 @@ function renderPhotos() {
   renderQuotePhotoStrip();
 }
 
-// Compute earliest → latest photo timestamps and render a friendly
-// "Time on site" line on the Job tab. Hidden when there are fewer than
-// 2 timestamps to compare. Stored on `job._timeOnSite` so the PDF can
-// reuse the same display string without recomputing.
+// Compute time on site — overrides win if both are set, otherwise
+// fall back to the earliest/latest photo timestamps. Result lands on
+// `job._timeOnSite` for the PDF / preview.
 function updateTimeOnSite() {
-  const block = document.getElementById('timeOnSiteBlock');
   const txt = document.getElementById('timeOnSiteText');
-  if (!block || !txt) return;
-  const stamps = photos.map(p => p && p.timestamp).filter(t => typeof t === 'number' && t > 0);
-  if (stamps.length < 2) {
-    block.style.display = 'none';
-    job._timeOnSite = '';
-    return;
+  if (!txt) return;
+  const arriveOverride = v('timeArriveOverride');
+  const leftOverride   = v('timeLeftOverride');
+  let display = '';
+
+  // If both overrides are set, use those (combined with jobDate for
+  // a full timestamp).
+  if (arriveOverride && leftOverride) {
+    const baseDate = job.jobDate || new Date().toISOString().split('T')[0];
+    const arrive = new Date(baseDate + 'T' + arriveOverride);
+    let depart = new Date(baseDate + 'T' + leftOverride);
+    if (isFinite(arrive.getTime()) && isFinite(depart.getTime())) {
+      // If left is before arrive, assume it crossed midnight and bump a day.
+      if (depart < arrive) depart = new Date(depart.getTime() + 24*3600*1000);
+      const ms = depart - arrive;
+      const totalMin = Math.round(ms / 60000);
+      const h = Math.floor(totalMin / 60);
+      const m = totalMin % 60;
+      const duration = (h > 0 ? h + 'h ' : '') + m + 'm';
+      const fmtT = d => d.toLocaleTimeString('en-CA', {hour:'2-digit', minute:'2-digit'});
+      display = duration + ' · arrived ' + fmtT(arrive) + ', left ' + fmtT(depart) + ' (manual)';
+    }
   }
-  const first = Math.min.apply(null, stamps);
-  const last  = Math.max.apply(null, stamps);
-  const ms = last - first;
-  // Format as Hh Mm (e.g. "2h 35m") plus the arrival and departure
-  // wall-clock times.
-  const totalMin = Math.round(ms / 60000);
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  const duration = (h > 0 ? h + 'h ' : '') + m + 'm';
-  const arrive = new Date(first);
-  const depart = new Date(last);
-  const sameDay = arrive.toDateString() === depart.toDateString();
-  const fmtT = d => d.toLocaleTimeString('en-CA', {hour:'2-digit', minute:'2-digit'});
-  const fmtDT = d => d.toLocaleString('en-CA', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
-  const display = sameDay
-    ? duration + ' &nbsp;·&nbsp; arrived ' + fmtT(arrive) + ', left ' + fmtT(depart) + ' (' + arrive.toLocaleDateString('en-CA', {month:'short', day:'numeric'}) + ')'
-    : duration + ' &nbsp;·&nbsp; arrived ' + fmtDT(arrive) + ', left ' + fmtDT(depart);
-  txt.innerHTML = display;
-  block.style.display = 'block';
-  job._timeOnSite = display.replace(/&nbsp;/g, ' ').replace(/<[^>]+>/g, '');
+  // Otherwise, derive from photo timestamps.
+  if (!display) {
+    const stamps = photos.map(p => p && p.timestamp).filter(t => typeof t === 'number' && t > 0);
+    if (stamps.length >= 2) {
+      const first = Math.min.apply(null, stamps);
+      const last  = Math.max.apply(null, stamps);
+      const totalMin = Math.round((last - first) / 60000);
+      const h = Math.floor(totalMin / 60);
+      const m = totalMin % 60;
+      const duration = (h > 0 ? h + 'h ' : '') + m + 'm';
+      const arrive = new Date(first);
+      const depart = new Date(last);
+      const fmtT = d => d.toLocaleTimeString('en-CA', {hour:'2-digit', minute:'2-digit'});
+      const sameDay = arrive.toDateString() === depart.toDateString();
+      const fmtDT = d => d.toLocaleString('en-CA', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+      display = sameDay
+        ? duration + ' · arrived ' + fmtT(arrive) + ', left ' + fmtT(depart)
+        : duration + ' · arrived ' + fmtDT(arrive) + ', left ' + fmtDT(depart);
+    }
+  }
+  txt.textContent = display || '—';
+  job._timeOnSite = display;
 }
 function removePhoto(i) {
   if (!confirm('Remove this photo?')) return;
@@ -1172,12 +1227,12 @@ function viewPhoto(i) {
     '<!DOCTYPE html><html><head><title>' + (p.name||'Photo') + '</title>'
     + '<style>body{margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh;cursor:pointer}'
     + 'img{max-width:100%;max-height:100vh;pointer-events:none}'
-    + '.x{position:fixed;top:10px;right:12px;background:rgba(0,0,0,0.6);color:#fff;border:1px solid rgba(255,255,255,0.4);border-radius:50%;width:40px;height:40px;font:700 22px/40px sans-serif;text-align:center;cursor:pointer;z-index:10}'
-    + '.done{position:fixed;bottom:36px;left:50%;transform:translateX(-50%);background:#fff;color:#000;border:none;border-radius:24px;padding:10px 22px;font:600 14px sans-serif;cursor:pointer;z-index:10}</style>'
+    + '.x{position:fixed;top:14px;right:14px;background:rgba(0,0,0,0.7);color:#fff;border:2px solid rgba(255,255,255,0.7);border-radius:50%;width:56px;height:56px;font:700 30px/52px sans-serif;text-align:center;cursor:pointer;z-index:10}'
+    + '.done{position:fixed;bottom:max(44px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:#fff;color:#000;border:none;border-radius:32px;padding:16px 36px;font:700 18px sans-serif;cursor:pointer;z-index:10;box-shadow:0 4px 14px rgba(0,0,0,0.5);min-width:160px}</style>'
     + '</head><body onclick="window.close()">'
     + '<div class="x" onclick="event.stopPropagation();window.close()">×</div>'
     + '<img src="' + p.src + '">'
-    + '<button class="done" onclick="event.stopPropagation();window.close()">Done</button>'
+    + '<button class="done" onclick="event.stopPropagation();window.close()">✓ Done</button>'
     + '</body></html>'
   );
   w.document.close();
@@ -2336,7 +2391,7 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 
-<div style="text-align:center;font-size:11px;color:#bbb;padding:12px 0">Job Quoter v1.1</div>
+<div style="text-align:center;font-size:11px;color:#bbb;padding:12px 0">Job Quoter v1.2</div>
 
 </body>
 </html>
