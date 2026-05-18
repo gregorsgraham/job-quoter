@@ -81,11 +81,11 @@
     <div class="card">
       <div class="card-title">Customer &amp; site</div>
       <div class="row c2">
-        <div class="field"><label>Customer name</label><input id="customerName" placeholder="e.g. John Smith" oninput="autosave()"></div>
+        <div class="field"><label>Customer name</label><input id="customerName" placeholder="e.g. John Smith" oninput="autosave();updateActiveJobBanner()"></div>
         <div class="field"><label>Phone</label><input id="customerPhone" type="tel" placeholder="e.g. 250-555-1234" oninput="autosave()"></div>
       </div>
       <div class="field"><label>Email</label><input id="customerEmail" type="email" placeholder="e.g. john@example.com" oninput="autosave()"></div>
-      <div class="field"><label>Site address</label><input id="siteAddress" placeholder="e.g. 123 Main St, Nelson BC" oninput="autosave()"></div>
+      <div class="field"><label>Site address</label><input id="siteAddress" placeholder="e.g. 123 Main St, Nelson BC" oninput="autosave();updateActiveJobBanner()"></div>
       <div class="row c2">
         <div class="field"><label>Job date</label><input id="jobDate" type="date" oninput="autosave()"></div>
         <div class="field"><label>Quote # <span class="small">(optional)</span></label><input id="quoteNumber" placeholder="auto" oninput="autosave()"></div>
@@ -154,6 +154,31 @@
 
   <!-- ===== PHOTOS TAB ===== -->
   <section id="tab-photos" class="page active">
+
+    <!-- ACTIVE JOB BANNER — at the top so the user always sees which
+         job they're snapping photos for. Tap to switch to another
+         saved job (or save the current one first, then come back). -->
+    <div id="activeJobBanner" style="background:#f0f6ff;border:2px solid #b3d1f5;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="flex:1;min-width:140px">
+        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.04em">Active job</div>
+        <div id="activeJobName" style="font-size:14px;font-weight:700;color:#1e3a5f">—</div>
+      </div>
+      <button class="btn btn-secondary" onclick="openJobSwitcher()" style="font-size:12px;padding:7px 12px">Switch job ▾</button>
+    </div>
+
+    <!-- Job switcher modal — popped from the active-job banner. Lists
+         the current job + every saved one. Picking a saved one loads
+         it (and prompts to save current first). -->
+    <div id="jobSwitcherModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:600;align-items:center;justify-content:center">
+      <div style="background:#fff;border-radius:12px;padding:20px;margin:20px;max-width:420px;width:100%;max-height:80vh;overflow-y:auto">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:15px;font-weight:700;color:#1e3a5f">Switch active job</div>
+          <button onclick="document.getElementById('jobSwitcherModal').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#888">×</button>
+        </div>
+        <div id="jobSwitcherList"></div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-title">📷 Site photos</div>
       <div class="hint">Photos are timestamped automatically when you take them. Tap the label that matches what you're shooting — labels appear on each thumbnail and group on the quote PDF.</div>
@@ -221,30 +246,73 @@
       <div id="quotePhotoStrip" class="photo-grid" style="margin-top:8px"></div>
     </div>
 
+    <!-- PRICING PRESETS — saved across all jobs so the user can build
+         their own per-square-foot / per-hour / per-day library and pull
+         from it without retyping. -->
+    <div class="card" style="background:#fff8e1;border-color:#ffe082">
+      <div class="card-title" style="color:#7a5c00;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <span>📋 My pricing list</span>
+        <button class="btn btn-secondary" onclick="openPresetsManager()" style="font-size:12px;padding:7px 12px">Manage list</button>
+      </div>
+      <div class="hint">Save items you charge for so you don't retype them every job — e.g. "Concrete pour, per sq ft, $9". Then pick from the dropdown next to each + Add button below. Your list stays across every job.</div>
+    </div>
+
     <div class="card">
       <div class="card-title">Line items — Materials</div>
       <div id="materialsList"></div>
-      <button class="btn btn-secondary" onclick="addLine('materials')">+ Add material</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
+        <button class="btn btn-secondary" onclick="addLine('materials')">+ Add material</button>
+        <select id="presetPick-materials" onchange="addLineFromPreset('materials', this.value); this.value=''" style="flex:1;min-width:160px;padding:8px 10px;border:1px solid #c8c4bd;border-radius:7px;font-size:13px;background:#fff">
+          <option value="">From my list…</option>
+        </select>
+      </div>
     </div>
 
     <div class="card">
       <div class="card-title">Line items — Labour</div>
       <div id="labourList"></div>
-      <button class="btn btn-secondary" onclick="addLine('labour')">+ Add labour</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
+        <button class="btn btn-secondary" onclick="addLine('labour')">+ Add labour</button>
+        <select id="presetPick-labour" onchange="addLineFromPreset('labour', this.value); this.value=''" style="flex:1;min-width:160px;padding:8px 10px;border:1px solid #c8c4bd;border-radius:7px;font-size:13px;background:#fff">
+          <option value="">From my list…</option>
+        </select>
+      </div>
     </div>
 
     <div class="card">
       <div class="card-title">Line items — Equipment / tools</div>
       <div class="hint" style="margin-bottom:8px">Rented or owned equipment used on the job: excavator, generator, scaffolding, specialty tools. Usually billed by hour or day.</div>
       <div id="equipmentList"></div>
-      <button class="btn btn-secondary" onclick="addLine('equipment')">+ Add equipment</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
+        <button class="btn btn-secondary" onclick="addLine('equipment')">+ Add equipment</button>
+        <select id="presetPick-equipment" onchange="addLineFromPreset('equipment', this.value); this.value=''" style="flex:1;min-width:160px;padding:8px 10px;border:1px solid #c8c4bd;border-radius:7px;font-size:13px;background:#fff">
+          <option value="">From my list…</option>
+        </select>
+      </div>
     </div>
 
     <div class="card">
       <div class="card-title">Line items — Transportation</div>
       <div class="hint" style="margin-bottom:8px">Mileage to/from site, fuel, freight, delivery fees. Usually charged per km or flat per trip.</div>
       <div id="transportationList"></div>
-      <button class="btn btn-secondary" onclick="addLine('transportation')">+ Add transportation</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
+        <button class="btn btn-secondary" onclick="addLine('transportation')">+ Add transportation</button>
+        <select id="presetPick-transportation" onchange="addLineFromPreset('transportation', this.value); this.value=''" style="flex:1;min-width:160px;padding:8px 10px;border:1px solid #c8c4bd;border-radius:7px;font-size:13px;background:#fff">
+          <option value="">From my list…</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Presets manager modal — opens from the "Manage list" button. -->
+    <div id="presetsModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:600;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px">
+      <div style="background:#fff;border-radius:12px;padding:20px;max-width:680px;width:100%;margin-top:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div style="font-size:16px;font-weight:700;color:#1e3a5f">📋 My pricing list</div>
+          <button onclick="document.getElementById('presetsModal').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#888">×</button>
+        </div>
+        <div class="hint" style="margin-bottom:12px">Build your reusable list of items + prices. The dropdown next to each "+ Add" button on the Quote tab pulls from here.</div>
+        <div id="presetsManagerContent"></div>
+      </div>
     </div>
 
     <div class="card">
@@ -532,6 +600,8 @@ function loadJob() {
   renderEmployees();
   updateActualDaysDisplay();
   renderVoiceNotes();
+  updateActiveJobBanner();
+  refreshPresetDropdowns();
   renderSavedJobs();
   recalc();
 }
@@ -621,6 +691,144 @@ function recalc() {
 // =========================================================================
 // PHOTOS
 // =========================================================================
+// =========================================================================
+// PRICING PRESETS — cross-job library of reusable items + prices.
+// Stored in localStorage under jq_presets. Survives Start-new-job and
+// every Load-archive — it's the user's personal pricing book.
+// =========================================================================
+const PRESET_CATS = ['materials', 'labour', 'equipment', 'transportation'];
+function _loadPresets() {
+  try {
+    const raw = localStorage.getItem('jq_presets');
+    if (raw) {
+      const p = JSON.parse(raw);
+      PRESET_CATS.forEach(c => { if (!Array.isArray(p[c])) p[c] = []; });
+      return p;
+    }
+  } catch(e){}
+  return { materials: [], labour: [], equipment: [], transportation: [] };
+}
+function _savePresets(p) {
+  try { localStorage.setItem('jq_presets', JSON.stringify(p)); } catch(e){}
+}
+function openPresetsManager() {
+  renderPresetsManager();
+  document.getElementById('presetsModal').style.display = 'flex';
+}
+function renderPresetsManager() {
+  const container = document.getElementById('presetsManagerContent');
+  if (!container) return;
+  const presets = _loadPresets();
+  const catTitles = { materials: 'Materials', labour: 'Labour', equipment: 'Equipment / tools', transportation: 'Transportation' };
+  container.innerHTML = PRESET_CATS.map(cat => {
+    const rows = (presets[cat] || []).map(p =>
+      '<div style="display:grid;grid-template-columns:2fr 1fr 1fr 28px;gap:6px;margin-bottom:5px;align-items:center">'
+      + '<input value="' + _attr(p.desc || '') + '" placeholder="Description (e.g. Concrete pour)" oninput="updatePreset(\'' + cat + '\',\'' + p.id + '\',\'desc\',this.value)" style="padding:7px 9px;font-size:12px">'
+      + '<input value="' + _attr(p.unit || '') + '" placeholder="Unit (e.g. sq ft)" oninput="updatePreset(\'' + cat + '\',\'' + p.id + '\',\'unit\',this.value)" style="padding:7px 9px;font-size:12px">'
+      + '<input type="number" step="0.01" value="' + (p.rate || '') + '" placeholder="$ rate" oninput="updatePreset(\'' + cat + '\',\'' + p.id + '\',\'rate\',this.value)" style="padding:7px 9px;font-size:12px;text-align:right">'
+      + '<button onclick="removePreset(\'' + cat + '\',\'' + p.id + '\')" title="Remove" style="background:none;border:none;color:#c62828;font-size:18px;cursor:pointer;padding:0">×</button>'
+      + '</div>'
+    ).join('');
+    return '<div style="margin-bottom:14px;padding:10px 12px;background:#f8f8f6;border:1px solid #ddd;border-radius:8px">'
+      + '<div style="font-weight:700;color:#1e3a5f;margin-bottom:8px">' + catTitles[cat] + '</div>'
+      + (rows || '<div class="empty" style="padding:4px 0">No saved items yet.</div>')
+      + '<button class="btn btn-secondary" onclick="addPreset(\'' + cat + '\')" style="font-size:12px;padding:6px 12px;margin-top:6px">+ Add to list</button>'
+      + '</div>';
+  }).join('');
+}
+function addPreset(cat) {
+  const presets = _loadPresets();
+  if (!Array.isArray(presets[cat])) presets[cat] = [];
+  presets[cat].push({ id: 'pst_' + Date.now() + '_' + Math.random().toString(36).slice(2,6), desc: '', unit: '', rate: 0 });
+  _savePresets(presets);
+  renderPresetsManager();
+  refreshPresetDropdowns();
+}
+function updatePreset(cat, id, field, val) {
+  const presets = _loadPresets();
+  const p = (presets[cat] || []).find(x => x.id === id);
+  if (!p) return;
+  if (field === 'rate') p.rate = parseFloat(val) || 0;
+  else p[field] = val;
+  _savePresets(presets);
+  refreshPresetDropdowns();
+}
+function removePreset(cat, id) {
+  const presets = _loadPresets();
+  const p = (presets[cat] || []).find(x => x.id === id);
+  if (!p) return;
+  if (!confirm('Remove "' + (p.desc || 'this item') + '" from your list?')) return;
+  presets[cat] = presets[cat].filter(x => x.id !== id);
+  _savePresets(presets);
+  renderPresetsManager();
+  refreshPresetDropdowns();
+}
+function refreshPresetDropdowns() {
+  const presets = _loadPresets();
+  PRESET_CATS.forEach(cat => {
+    const sel = document.getElementById('presetPick-' + cat);
+    if (!sel) return;
+    const list = (presets[cat] || []).filter(p => p.desc && p.desc.trim());
+    sel.innerHTML = '<option value="">From my list…</option>'
+      + list.map(p => {
+        const label = p.desc + (p.unit ? ' (' + p.unit + ')' : '') + ' — $' + (p.rate || 0).toFixed(2);
+        return '<option value="' + p.id + '">' + _attr(label) + '</option>';
+      }).join('');
+  });
+}
+function addLineFromPreset(cat, presetId) {
+  if (!presetId) return;
+  const presets = _loadPresets();
+  const p = (presets[cat] || []).find(x => x.id === presetId);
+  if (!p) return;
+  const arr = _lineArr(cat);
+  const desc = p.desc + (p.unit ? ' (per ' + p.unit + ')' : '');
+  arr.push({ desc: desc, qty: 1, rate: p.rate || 0 });
+  renderLineItems(cat);
+  autosave();
+  recalc();
+}
+
+// =========================================================================
+// ACTIVE JOB BANNER + SWITCHER (Photos tab)
+// =========================================================================
+function updateActiveJobBanner() {
+  const el = document.getElementById('activeJobName');
+  if (!el) return;
+  const name = (job.customerName || job.siteAddress || 'New job (unsaved)') + (job.jobDate ? ' · ' + job.jobDate : '');
+  el.textContent = name;
+}
+function openJobSwitcher() {
+  const list = document.getElementById('jobSwitcherList');
+  if (!list) return;
+  let arr = [];
+  try { arr = JSON.parse(localStorage.getItem('jq_archive') || '[]'); } catch(e){}
+  let html = '<div style="background:#e8f5e9;border:2px solid #2d7a3a;border-radius:8px;padding:10px 12px;margin-bottom:10px">'
+    + '<div style="font-size:11px;color:#888;text-transform:uppercase">Currently active</div>'
+    + '<div style="font-weight:700;color:#1e3a5f">' + _attr(job.customerName || job.siteAddress || 'New job (unsaved)') + '</div>'
+    + '</div>';
+  if (!arr.length) {
+    html += '<div class="empty">No saved jobs to switch to yet. Save the current job first via the Job tab.</div>';
+  } else {
+    html += '<div class="hint" style="margin-bottom:8px">Tap a saved job to switch to it. Your current job is autosaved — switching back later restores it.</div>';
+    html += arr.map(entry => {
+      const j = entry.job || {};
+      return '<button onclick="switchToJob(\'' + entry.id + '\')" style="display:block;width:100%;text-align:left;background:#fff;border:1px solid #ddd;border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer;font-family:inherit">'
+        + '<div style="font-weight:600;color:#1e3a5f">' + _attr(entry.label) + '</div>'
+        + '<div style="font-size:11px;color:#888;margin-top:2px">' + _attr(j.customerName || j.siteAddress || '') + (j.jobDate ? ' · ' + j.jobDate : '') + '</div>'
+        + '</button>';
+    }).join('');
+  }
+  list.innerHTML = html;
+  document.getElementById('jobSwitcherModal').style.display = 'flex';
+}
+function switchToJob(id) {
+  document.getElementById('jobSwitcherModal').style.display = 'none';
+  loadJob(id);
+  // loadJob already prompts to replace. After it resolves we update the banner.
+  setTimeout(updateActiveJobBanner, 100);
+}
+
 // Clear the input's value BEFORE programmatically clicking it. Browsers
 // (especially Safari/iOS) sometimes won't fire onchange on a second
 // pick of the same file when the input still has a previous selection.
@@ -2139,7 +2347,7 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 
-<div style="text-align:center;font-size:11px;color:#bbb;padding:12px 0">Job Quoter v1.0</div>
+<div style="text-align:center;font-size:11px;color:#bbb;padding:12px 0">Job Quoter v1.1</div>
 
 </body>
 </html>
